@@ -21,7 +21,12 @@ chmod +x ssh_key_manager.sh
 nano ~/.zshrc #open zshc and start config 
 # Add it in your ~/.zshrc
 source ~/.ssh_key_manager.sh # if your OS is macOS
-source source ~/ssh_key_manager.sh # if your OS is linux ubuntu
+source ~/ssh_key_manager.sh # if your OS is linux ubuntu
+```
+### Bước 4: Load lại zsh của bạn
+```bash
+source ~/.ssh_key_manager.sh
+source ~/.zshrc
 ```
 ### Một số alias được tạo
 
