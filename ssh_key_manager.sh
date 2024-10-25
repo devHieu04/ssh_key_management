@@ -52,7 +52,7 @@ ssh_key_manager() {
     fi
     
     typeset -a keys
-    keys=($(find "$SSH_DIR" -type f  -name "*.pub"))
+    keys=($(find "$SSH_DIR" -type f ! -name "*.pub"))
     
     if [ ${#keys} -eq 0 ]; then
         echo -e "${PURPLE}No SSH keys found in $SSH_DIR${NC}"
