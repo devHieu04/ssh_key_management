@@ -21,7 +21,7 @@ chmod +x ssh_key_manager.sh
 ```bash
 pwd #get your zsh alias
 cd ~  #checkout home 
-nano ~/.zshc #open zshc and start config 
+nano ~/.zshrc #open zshc and start config 
 export PATH="$PATH:/path/to/ssh_key_manager" #replace your path ssh_key_manager.sh
 
 ```
