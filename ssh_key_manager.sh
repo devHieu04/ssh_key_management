@@ -41,6 +41,99 @@ create_ssh_key() {
     echo -e "${PURPLE}SSH key created: $key_path${NC}"
 }
 
+
+# Function to copy selected SSH public key to clipboard
+copy_ssh_key() {
+    SSH_DIR="$HOME/.ssh"
+    
+    # Create SSH directory if it doesn't exist
+    if [ ! -d "$SSH_DIR" ]; then
+        mkdir -p "$SSH_DIR"
+        chmod 700 "$SSH_DIR"
+    fi
+    
+    # Find public SSH keys
+    typeset -a keys
+    keys=($(find "$SSH_DIR" -type f -name "*.pub"))
+    
+    # Check if any public keys exist
+    if [ ${#keys} -eq 0 ]; then
+        echo -e "${PURPLE}No SSH public keys found in $SSH_DIR${NC}"
+        return 1
+    fi
+    
+    # Display available SSH public keys
+    echo -e "${CYAN}Available SSH public keys:${NC}"
+    integer i=0
+    for key in "${keys[@]}"; do
+        key_name=$(basename "$key")
+        echo -e "${GREEN}[$i] $key_name${NC}"
+        ((i++))
+    done
+    
+    # Prompt user to select a key index
+    echo ""
+    echo "Select key index to copy its public key (0-$((${#keys}-1))):"
+    read "selection?"
+
+    # Validate selection
+    if ! [[ "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -ge "${#keys}" ]; then
+        echo -e "${PURPLE}Invalid selection.${NC}"
+        return 1
+    fi
+
+    # Get the selected public key
+    selected_key="${keys[$selection]}"
+
+    # Attempt to use pbcopy for macOS
+    if command -v pbcopy &> /dev/null; then
+        pbcopy < "$selected_key"
+        echo -e "${GREEN}Copied SSH public key to clipboard: ${selected_key}${NC}"
+    # Attempt to use xclip for Linux
+    elif command -v xclip &> /dev/null; then
+        xclip -sel clip < "$selected_key"
+        echo -e "${GREEN}Copied SSH public key to clipboard: ${selected_key}${NC}"
+    # Attempt to use xsel for Linux
+    elif command -v xsel &> /dev/null; then
+        xsel --clipboard < "$selected_key"
+        echo -e "${GREEN}Copied SSH public key to clipboard: ${selected_key}${NC}"
+    else
+        echo -e "${PURPLE}No clipboard command found. Unable to copy to clipboard.${NC}"
+        return 1
+    fi
+}
+
+ssh_key_list() {
+    SSH_DIR="$HOME/.ssh"
+    CONFIG_FILE="$SSH_DIR/config"
+    
+    # Create SSH directory if it doesn't exist
+    if [ ! -d "$SSH_DIR" ]; then
+        mkdir -p "$SSH_DIR"
+        chmod 700 "$SSH_DIR"
+    fi
+    
+    # Find private SSH keys in the directory
+    typeset -a keys
+    keys=($(find "$SSH_DIR" -type f ! -name "*.pub"))
+    
+    if [ ${#keys[@]} -eq 0 ]; then
+        echo -e "${PURPLE}No SSH keys found in $SSH_DIR${NC}"
+        return 1
+    fi
+    
+    # Display available SSH keys
+    echo -e "${CYAN}Available SSH keys:${NC}"
+    integer i=0
+    for key in "${keys[@]}"; do
+        key_name=$(basename "$key")
+        echo -e "${GREEN}[$i] $key_name${NC}"
+        ((i++))
+    done
+    
+    return 0
+}
+
 # Function to manage SSH keys
 ssh_key_manager() {
     SSH_DIR="$HOME/.ssh"
@@ -81,7 +174,7 @@ ssh_key_manager() {
     echo ""
     echo -e "${CYAN}Choose a host for this SSH key:${NC}"
     echo -e "${GREEN}[0] github.com${NC}"
-    echo -e "${GREEN}[1] gitlab.kiaisoft.com${NC}"
+    echo -e "${GREEN}[1] gitlab.com${NC}"
     echo -e "${GREEN}[2] Enter custom domain${NC}"
     read "host_selection?"
 
@@ -90,7 +183,7 @@ ssh_key_manager() {
             host="github.com"
             ;;
         1)
-            host="gitlab.kiaisoft.com"
+            host="gitlab.com"
             ;;
         2)
             echo "Enter the custom domain:"
@@ -212,13 +305,17 @@ show_help() {
     echo -e "${GREEN}sshnew${NC} - Create a new SSH key"
     echo -e "${GREEN}sshc${NC} - Show current SSH configuration and keys"
     echo -e "${GREEN}sshrm${NC} - Remove an SSH key and its config"
-    echo -e "${GREEN}help${NC} - Show this help information"
+    echo -e "${GREEN}ssh_help${NC} - Show this help information"
+    echo -e "${GREEN}ssh_copy${NC} - ssh copy publish key"
+    echo -e "${GREEN}list_ssh_keys${NC} - list ssh keys"
 }
 
 # Aliases for convenience
 alias ssh_help="show_help"
+alias list_ssh_keys="ssh_key_list"
 alias sshm="ssh_key_manager"
 alias sshp="check_github_connection"
 alias sshnew="create_ssh_key"
 alias sshc="show_ssh_info"
 alias sshrm="remove_ssh_key"
+alias ssh_copy= "copy_ssh_key"
