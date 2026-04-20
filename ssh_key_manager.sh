@@ -16,12 +16,12 @@ check_github_connection() {
 # Function to create a new SSH key
 create_ssh_key() {
     SSH_DIR="$HOME/.ssh"
-    
+
     if [ ! -d "$SSH_DIR" ]; then
         mkdir -p "$SSH_DIR"
         chmod 700 "$SSH_DIR"
     fi
-    
+
     echo "Enter the name for your new SSH key (without extension):"
     read "key_name?"
 
@@ -45,23 +45,23 @@ create_ssh_key() {
 # Function to copy selected SSH public key to clipboard
 copy_ssh_key() {
     SSH_DIR="$HOME/.ssh"
-    
+
     # Create SSH directory if it doesn't exist
     if [ ! -d "$SSH_DIR" ]; then
         mkdir -p "$SSH_DIR"
         chmod 700 "$SSH_DIR"
     fi
-    
+
     # Find public SSH keys
     typeset -a keys
     keys=($(find "$SSH_DIR" -type f -name "*.pub"))
-    
+
     # Check if any public keys exist
     if [ ${#keys} -eq 0 ]; then
         echo -e "${PURPLE}No SSH public keys found in $SSH_DIR${NC}"
         return 1
     fi
-    
+
     # Display available SSH public keys
     echo -e "${CYAN}Available SSH public keys:${NC}"
     integer i=0
@@ -70,7 +70,7 @@ copy_ssh_key() {
         echo -e "${GREEN}[$i] $key_name${NC}"
         ((i++))
     done
-    
+
     # Prompt user to select a key index
     echo ""
     echo "Select key index to copy its public key (0-$((${#keys}-1))):"
@@ -82,8 +82,8 @@ copy_ssh_key() {
         return 1
     fi
 
-    # Get the selected public key
-    selected_key="${keys[$selection]}"
+    # Zsh arrays are 1-based, while the displayed list is 0-based.
+    selected_key="${keys[$((selection+1))]}"
 
     # Attempt to use pbcopy for macOS
     if command -v pbcopy &> /dev/null; then
@@ -214,6 +214,53 @@ _extract_pubkey_email() {
     local pub="${priv_key}.pub"
     [ -f "$pub" ] || return 0
     awk '{print $NF}' "$pub"
+}
+
+# Remove any Host block that references the selected IdentityFile.
+_remove_config_blocks_for_identity() {
+    local config_file="$1"
+    local identity_file="$2"
+    local temp_file
+
+    temp_file=$(mktemp "${config_file}.tmp.XXXXXX") || return 1
+
+    awk -v identity="$identity_file" '
+        function flush_block() {
+            if (block != "") {
+                if (!remove_block) {
+                    printf "%s", block
+                }
+                block = ""
+                remove_block = 0
+            }
+        }
+        /^Host / {
+            flush_block()
+            block = $0 ORS
+            next
+        }
+        {
+            if (block != "") {
+                if ($1 == "IdentityFile" && $2 == identity) {
+                    remove_block = 1
+                }
+                block = block $0 ORS
+            } else {
+                print
+            }
+        }
+        END {
+            flush_block()
+        }
+    ' "$config_file" > "$temp_file" || {
+        rm -f "$temp_file"
+        return 1
+    }
+
+    mv "$temp_file" "$config_file" || {
+        rm -f "$temp_file"
+        return 1
+    }
 }
 
 # Function to manage SSH keys
@@ -360,7 +407,7 @@ EOF
 show_ssh_info() {
     SSH_DIR="$HOME/.ssh"
     CONFIG_FILE="$SSH_DIR/config"
-    
+
     echo -e "${CYAN}Current SSH configuration (Hosts):${NC}"
     if [ -f "$CONFIG_FILE" ]; then
         grep -E '^Host ' "$CONFIG_FILE"
@@ -376,21 +423,21 @@ show_ssh_info() {
 remove_ssh_key() {
     SSH_DIR="$HOME/.ssh"
     CONFIG_FILE="$SSH_DIR/config"
-    
+
     if [ ! -d "$SSH_DIR" ]; then
         echo -e "${PURPLE}No SSH directory found.${NC}"
         return 1
     fi
 
-    # List available SSH keys (excluding .pub files)
+    # List private SSH keys so we can remove the full key pair.
     typeset -a keys
-    keys=($(find "$SSH_DIR" -type f  -name "*.pub"))
-    
+    keys=($(find "$SSH_DIR" -type f ! -name "*.pub" ! -name "config*" ! -name "known_hosts*" ! -name "authorized_keys"))
+
     if [ ${#keys} -eq 0 ]; then
         echo -e "${PURPLE}No SSH keys found in $SSH_DIR.${NC}"
         return 1
     fi
-    
+
     echo -e "${CYAN}Available SSH keys:${NC}"
     integer i=0
     for key in $keys; do
@@ -398,7 +445,7 @@ remove_ssh_key() {
         echo -e "${GREEN}[$i] $key_name${NC}"
         ((i++))
     done
-    
+
     echo ""
     echo "Select key index to remove (0-$((${#keys}-1))):"
     read "selection?"
@@ -407,9 +454,9 @@ remove_ssh_key() {
         echo -e "${PURPLE}Invalid selection.${NC}"
         return 1
     fi
-    
-    selected_key="${keys[$((selection+1))]}"
-    selected_key_basename=$(basename "$selected_key")
+
+    local selected_key="${keys[$((selection+1))]}"
+    local selected_key_basename=$(basename "$selected_key")
 
     echo "Are you sure you want to delete SSH key $selected_key_basename? (y/n)"
     read "confirm?"
@@ -423,12 +470,14 @@ remove_ssh_key() {
 
     if [ -f "$CONFIG_FILE" ]; then
         cp "$CONFIG_FILE" "$CONFIG_FILE.backup"
-        sed -i.bak "/^Host $host$/,/^Host /{//!d; /^Host $host$/d;}" "$CONFIG_FILE"
-        echo -e "${PURPLE}Removed SSH key configuration for IdentityFile: $selected_key${NC}"
+        _remove_config_blocks_for_identity "$CONFIG_FILE" "$selected_key" || return 1
+        chmod 600 "$CONFIG_FILE"
+        echo -e "${PURPLE}Removed SSH key configuration entries for IdentityFile: $selected_key${NC}"
     else
         echo -e "${PURPLE}No SSH config file found.${NC}"
     fi
 }
+
 # Function to display help information
 show_help() {
     echo -e "${PURPLE}Available Commands:${NC}"
